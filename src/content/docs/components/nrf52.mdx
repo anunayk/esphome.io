@@ -63,6 +63,71 @@ nrf52:
   board: adafruit_itsybitsy_nrf52840
 ```
 
+## MCUboot
+
+The `mcuboot:` block holds advanced options for the MCUboot bootloader. It is only valid when the
+`bootloader` is `mcuboot`.
+
+```yaml
+# Example configuration entry
+nrf52:
+  board: xiao_ble
+  bootloader: mcuboot
+  mcuboot:
+    usb_cdc_recovery: true
+```
+
+### Configuration Variables
+
+- **usb_cdc_recovery** (*Optional*, boolean): Build a single-application-slot MCUboot bootloader with
+  USB-CDC serial recovery. This allows installing MCUboot **without an SWD probe**. Only supported on the
+  `xiao_ble` board, and cannot be combined with a [`zephyr_mcumgr`](/components/ota/zephyr_mcumgr) OTA (see
+  below). Defaults to `false`.
+
+### USB-CDC Recovery (No SWD)
+
+Installing MCUboot on the nRF52 normally requires an SWD connection (see
+[Flashing with MCUboot](#flashing-with-mcuboot) above). The Seeed XIAO nRF52840 BLE ships with a stock
+Adafruit bootloader but no exposed SWD pads, which makes that path inconvenient.
+
+Setting `usb_cdc_recovery: true` builds a compact MCUboot bootloader that fits inside the stock Adafruit
+bootloader's executable slot. It can therefore be installed over USB through the existing Adafruit
+bootloader — no SWD probe required for the install itself. Once installed, the bootloader exposes a
+USB-CDC MCUboot serial recovery mode that accepts application firmware uploads directly.
+
+When you compile a configuration with this option enabled, ESPHome produces an
+[`adafruit-nrfutil`](https://github.com/adafruit/Adafruit_nRF52_nrfutil) DFU package and surfaces it in
+the dashboard as a download named **MCUboot bootloader update package**.
+
+To install the bootloader through the stock Adafruit bootloader:
+
+1. Compile the configuration and download the **MCUboot bootloader update package** (DFU zip) from the
+   dashboard.
+1. Put the board into the Adafruit bootloader's DFU mode by quickly shorting the reset pin to ground twice
+   (double-tap reset).
+1. Flash the DFU package with `adafruit-nrfutil`, for example:
+
+   ```bash
+   adafruit-nrfutil dfu serial --package mcuboot_update.zip -p /dev/ttyACM0 -b 115200
+   ```
+
+After installation, enter the MCUboot USB-CDC serial recovery mode to upload application firmware in the
+usual way with `esphome upload yourfile.yaml`.
+
+> [!WARNING]
+> Replacing the bootloader is risky. An earlier version of this layout placed the application slot over the
+> nRF MBR at address `0x0`, which destroyed the boot path and **bricked the board**, recoverable only over
+> SWD. The current layout reserves the MBR at `0x0` and is hardware-validated on a real XIAO nRF52840 BLE,
+> but **you should still have an SWD probe (e.g. an ST-Link V2) available before attempting a bootloader
+> replacement.** If a flash goes wrong, re-flashing over SWD is the documented recovery path.
+
+> [!NOTE]
+> `usb_cdc_recovery` builds a **single-application-slot** MCUboot. A single slot has no secondary slot and
+> never swaps, so it is incompatible with a [`zephyr_mcumgr`](/components/ota/zephyr_mcumgr) OTA (such as
+> OTA over BLE): the OTA would upload an image the bootloader silently ignores while continuing to boot the
+> old firmware. ESPHome rejects this combination at validation time. Use either single-slot USB-CDC
+> recovery **or** a two-slot OTA bootloader, not both.
+
 ## GPIO Pin Numbering
 
 There are two ways to reference GPIO pins:
